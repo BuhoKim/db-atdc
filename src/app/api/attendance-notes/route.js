@@ -24,7 +24,14 @@ export async function GET(request) {
         if (!match) return new NextResponse('Invalid image', { status: 422 });
         return new Response(Buffer.from(match[2], 'base64'), { headers: { 'Content-Type': match[1], 'Cache-Control': 'private, max-age=300' } });
       }
-      return NextResponse.redirect(imageUrl, { status: 307 });
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) return new NextResponse('Image unavailable', { status: 502 });
+      return new Response(await imageResponse.arrayBuffer(), {
+        headers: {
+          'Content-Type': imageResponse.headers.get('content-type') || 'image/jpeg',
+          'Cache-Control': 'private, max-age=300',
+        },
+      });
     }
 
     const notes = await fetchAttendanceNotes({ fromDate, toDate, empNo });

@@ -42,8 +42,11 @@ export async function POST(request) {
 
           const bucketName = 'attendance-notes';
           const { data: buckets } = await supabaseAdmin.storage.listBuckets();
-          if (!buckets?.some(b => b.name === bucketName)) {
-            await supabaseAdmin.storage.createBucket(bucketName, { public: true });
+          const existingBucket = buckets?.find(b => b.name === bucketName);
+          if (!existingBucket) {
+            await supabaseAdmin.storage.createBucket(bucketName, { public: false });
+          } else if (existingBucket.public) {
+            await supabaseAdmin.storage.updateBucket(bucketName, { public: false });
           }
 
           const { data: uploadData, error: uploadError } = await supabaseAdmin.storage

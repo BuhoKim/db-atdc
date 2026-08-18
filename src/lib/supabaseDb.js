@@ -285,7 +285,18 @@ export async function fetchAttendanceNotes({ fromDate, toDate, empNo } = {}) {
       console.warn('fetchAttendanceNotes query warning:', error.message);
       return [];
     }
-    return data || [];
+    return Promise.all((data || []).map(async (note) => {
+      const imageUrl = String(note.image_url || '');
+      const marker = '/storage/v1/object/public/attendance-notes/';
+      const markerIndex = imageUrl.indexOf(marker);
+      if (!imageUrl || markerIndex < 0) return note;
+
+      const filePath = decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+      const { data: signed } = await supabaseAdmin.storage
+        .from('attendance-notes')
+        .createSignedUrl(filePath, 60 * 60);
+      return { ...note, image_url: signed?.signedUrl || note.image_url };
+    }));
   } catch (err) {
     console.error('fetchAttendanceNotes error:', err);
     return [];

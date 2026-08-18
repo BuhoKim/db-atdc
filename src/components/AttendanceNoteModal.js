@@ -107,8 +107,8 @@ export default function AttendanceNoteModal({ isOpen, onClose, empNo, empName, d
               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Ctrl+V 붙여넣기 지원</span>
             </div>
             {imagePreview ? (
-              <div style={{ position: 'relative', borderRadius: 8, border: '1px solid var(--border-color, #e2e8f0)', overflow: 'hidden', maxHeight: 200, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
-                <img src={imagePreview} alt='증빙' style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }} />
+              <div style={{ position: 'relative', borderRadius: 8, border: '1px solid var(--border-color, #e2e8f0)', overflow: 'auto', maxHeight: 360, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
+                <img src={imagePreview} alt='증빙' style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 360, objectFit: 'contain' }} />
                 <button type='button' onClick={() => { setImageUrl(null); setImageBase64(null); setImagePreview(null); }} style={{ position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}><Trash2 size={12} /> 삭제</button>
               </div>
             ) : (

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireApiSession } from '@/lib/apiAuth';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { fetchAttendanceNotes, saveAttendanceNote, deleteAttendanceNote } from '@/lib/supabaseDb';
 import { normalizeEmpNoKey } from '@/lib/dashboardUtils';
@@ -7,10 +8,24 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   try {
+    const auth = await requireApiSession(request);
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const fromDate = searchParams.get('from') || searchParams.get('fromDate') || '';
     const toDate = searchParams.get('to') || searchParams.get('toDate') || '';
     const empNo = searchParams.get('empNo') || '';
+
+    if (searchParams.get('image') === '1') {
+      const notes = await fetchAttendanceNotes({ fromDate, toDate, empNo });
+      const imageUrl = notes[0]?.image_url || '';
+      if (!imageUrl) return new NextResponse('Not found', { status: 404 });
+      if (imageUrl.startsWith('data:image/')) {
+        const match = imageUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        if (!match) return new NextResponse('Invalid image', { status: 422 });
+        return new Response(Buffer.from(match[2], 'base64'), { headers: { 'Content-Type': match[1], 'Cache-Control': 'private, max-age=300' } });
+      }
+      return NextResponse.redirect(imageUrl, { status: 307 });
+    }
 
     const notes = await fetchAttendanceNotes({ fromDate, toDate, empNo });
     return NextResponse.json({ success: true, notes });

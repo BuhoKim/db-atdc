@@ -12,12 +12,15 @@ export default function AttendanceNoteModal({ isOpen, onClose, empNo, empName, d
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
 
+  const imageEndpoint = () => `/api/attendance-notes?image=1&empNo=${encodeURIComponent(empNo || '')}&from=${encodeURIComponent(String(workDate || '').slice(0, 10))}&to=${encodeURIComponent(String(workDate || '').slice(0, 10))}`;
+  const previewUrl = (url) => String(url || '').startsWith('data:image/') ? url : (url ? imageEndpoint() : null);
+
   useEffect(() => {
     if (isOpen) {
       setNote(initialNote || '');
       setImageUrl(initialImageUrl || null);
       setImageBase64(null);
-      setImagePreview(initialImageUrl || null);
+      setImagePreview(previewUrl(initialImageUrl));
       setError(null);
       const isSystemMemo = initialNote && (initialNote.includes('기록') || initialNote.includes('출근 (') || initialNote.includes('퇴근 ('));
       if (isSystemMemo) setNote('');
@@ -30,7 +33,7 @@ export default function AttendanceNoteModal({ isOpen, onClose, empNo, empName, d
             if (d?.notes?.length > 0) {
               setNote(d.notes[0].note || '');
               setImageUrl(d.notes[0].image_url || null);
-              setImagePreview(d.notes[0].image_url || null);
+              setImagePreview(previewUrl(d.notes[0].image_url));
             }
           })
           .catch(() => {});

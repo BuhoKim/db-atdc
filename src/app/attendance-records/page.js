@@ -538,9 +538,10 @@ function AttendanceRecordsContent() {
                           </span>
                         </td>
                         <td style={{ color: 'var(--text-2)', fontSize: 13 }}>
-                          {log.note ? (
+                          {log.note || log.noteImageUrl ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, backgroundColor: 'rgba(37,99,235,0.1)', color: 'var(--blue)', fontWeight: 600, fontSize: 12.5 }}>
-                              📜 {log.note}
+                              {log.note ? '📜' : '🖼️'} {log.note || '증빙 이미지 첨부'}
+                              {log.noteImageUrl && <button type="button" title="증빙 이미지 열기" onClick={() => window.open(log.noteImageUrl, '_blank', 'noopener,noreferrer')} style={{ marginLeft: 2, border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13 }}>🖼️</button>}
                             </span>
                           ) : (
                              log.memo || '-'
@@ -575,7 +576,7 @@ function AttendanceRecordsContent() {
                               cursor: 'pointer',
                             }}
                           >
-                            {log.note ? '📜 수정' : '📜 사유'}
+                            {log.note || log.noteImageUrl ? '📜 수정' : '📜 사유'}
                           </button>
                         </td>
                       </tr>

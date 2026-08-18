@@ -57,10 +57,9 @@ export async function POST(request) {
             });
 
           if (!uploadError && uploadData) {
-            const { data: publicUrlData } = supabaseAdmin.storage
-              .from(bucketName)
-              .getPublicUrl(fileName);
-            finalImageUrl = publicUrlData.publicUrl;
+            // Keep only a storage reference in the database. The read API
+            // converts it to a short-lived signed URL for authenticated users.
+            finalImageUrl = `storage://${bucketName}/${fileName}`;
           } else {
             console.warn('Storage upload warning:', uploadError?.message);
             finalImageUrl = imageBase64;

@@ -289,9 +289,13 @@ export async function fetchAttendanceNotes({ fromDate, toDate, empNo } = {}) {
       const imageUrl = String(note.image_url || '');
       const marker = '/storage/v1/object/public/attendance-notes/';
       const markerIndex = imageUrl.indexOf(marker);
-      if (!imageUrl || markerIndex < 0) return note;
-
-      const filePath = decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+      const storageMarker = 'storage://attendance-notes/';
+      const filePath = imageUrl.startsWith(storageMarker)
+        ? decodeURIComponent(imageUrl.slice(storageMarker.length))
+        : markerIndex >= 0
+          ? decodeURIComponent(imageUrl.slice(markerIndex + marker.length))
+          : null;
+      if (!filePath) return note;
       const { data: signed } = await supabaseAdmin.storage
         .from('attendance-notes')
         .createSignedUrl(filePath, 60 * 60);

@@ -97,6 +97,16 @@ function leaveLabel(leave: any) {
     '16': '오전반차',
     '17': '오후반차',
     '18': '경조휴가',
+    '19': '2시간휴가A [07-09]',
+    '20': '2시간휴가B [08-10]',
+    '21': '2시간휴가C [09-11]',
+    '22': '2시간휴가D [10-12]',
+    '23': '2시간휴가E [11-13]',
+    '24': '2시간휴가F [13-15]',
+    '25': '2시간휴가G [14-16]',
+    '26': '2시간휴가H [15-17]',
+    '27': '2시간휴가I [16-18]',
+    '28': '2시간휴가J [17-19]',
     '51': '연차',
     '61': '오전반차',
     '62': '오후반차',
@@ -233,20 +243,20 @@ Deno.serve(async (request) => {
     const dateStart = workDate.replace(/-/g, '');
     const employees = await supabaseRequest('db_employees?company_code=eq.1700&is_active=eq.true&select=emp_no,name,dept');
     const schedules = await supabaseRequest('db_employee_schedules?select=emp_no,schedule_time,schedule_reason');
-    const logs = await supabaseRequest(`db_attendance?a_time=gte.${dateStart}000000&a_time=lte.${dateStart}235959&select=emp_no,a_time&order=a_time.asc`);
-    const leaves = await supabaseRequest(`db_leaves?start_date=lte.${dateStart}&end_date=gte.${dateStart}&status=eq.40&select=emp_no,leave_code,leave_name,leave_days`);
+    const logs = await supabaseRequest(`db_attendance?a_time=gte.${dateStart}000000&a_time=lte.${dateStart}235959&select=emp_no,sabun,a_time&order=a_time.asc`);
+    const leaves = await supabaseRequest(`db_leaves?start_date=lte.${dateStart}&end_date=gte.${dateStart}&status=eq.40&select=emp_no,emp_name,leave_code,leave_name,leave_days`);
 
     const employeeMap = new Map((employees || []).map((row: any) => [normalizeEmpNo(row.emp_no), row]));
     const scheduleMap = new Map((schedules || []).map((row: any) => [normalizeEmpNo(row.emp_no), row]));
     const leaveMap = new Map<string, any[]>();
     for (const row of leaves || []) {
-      const empNo = normalizeEmpNo(row.emp_no);
+      const empNo = normalizeEmpNo(row.emp_no || row.sabun);
       if (!leaveMap.has(empNo)) leaveMap.set(empNo, []);
       leaveMap.get(empNo)?.push(row);
     }
     const logMap = new Map<string, string[]>();
     for (const row of logs || []) {
-      const empNo = normalizeEmpNo(row.emp_no);
+      const empNo = normalizeEmpNo(row.emp_no || row.sabun);
       if (!logMap.has(empNo)) logMap.set(empNo, []);
       logMap.get(empNo)?.push(String(row.a_time || ''));
     }
@@ -283,10 +293,18 @@ Deno.serve(async (request) => {
         early.push({ name: employee.name, checkOut: last });
       }
     }
-    const leaveRows = [...leaveMap.entries()].map(([empNo, rows]: [string, any[]]) => ({
-      name: employeeMap.get(empNo)?.name || empNo,
-      leaveName: rows.map((row) => leaveLabel(row)).join(', '),
-    }));
+    const leaveRows = [...leaveMap.entries()].flatMap(([empNo, rows]: [string, any[]]) => {
+      const hasAttendance = (logMap.get(empNo) || []).length > 0;
+      const hasFullDayLeave = rows.some((row) => Number(row.leave_days || 0) >= 1);
+      // A full-day leave is not reported when actual attendance exists.
+      // Partial leaves (half-day / two-hour leave) remain visible because
+      // working part of the day is expected in that case.
+      if (hasAttendance && hasFullDayLeave) return [];
+      return [{
+        name: employeeMap.get(empNo)?.name || rows[0]?.emp_name || empNo,
+        leaveName: rows.map((row) => leaveLabel(row)).join(', '),
+      }];
+    });
     const message = buildReport({ workDate, late, absent, early, leave: leaveRows, scheduleExceptions, employees });
     const providerMessageId = await sendMail(`[드림베이 전일 근무일정] ${workDate}`, message);
     await supabaseRequest(`db_notification_deliveries?job_key=eq.${encodeURIComponent(jobKey)}`, {

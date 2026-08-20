@@ -119,6 +119,35 @@ function hasLeaveCode(leaves: any[], codes: string[]) {
   return leaves.some((leave) => codes.includes(String(leave?.leave_code || '')));
 }
 
+const TWO_HOUR_LEAVE_CODES = new Set(['19', '20', '21', '22', '23', '24', '25', '26', '27', '28']);
+const TWO_HOUR_WINDOWS: Record<string, [number, number]> = {
+  '19': [7 * 60, 9 * 60], '20': [8 * 60, 10 * 60], '21': [9 * 60, 11 * 60],
+  '22': [10 * 60, 12 * 60], '23': [11 * 60, 13 * 60], '24': [13 * 60, 15 * 60],
+  '25': [14 * 60, 16 * 60], '26': [15 * 60, 17 * 60], '27': [16 * 60, 18 * 60],
+  '28': [17 * 60, 19 * 60],
+};
+
+function leaveType(leave: any) {
+  const code = String(leave?.leave_code || '').trim();
+  const name = String(leave?.leave_name || '').replace(/\s+/g, '').toLowerCase();
+  if (['16', '61'].includes(code) || name.includes('오전반차') || name.includes('4시간휴가[오전]') || name.includes('4시간휴가(오전)')) return 'morning_half';
+  if (['17', '62'].includes(code) || name.includes('오후반차') || name.includes('4시간휴가[오후]') || name.includes('4시간휴가(오후)')) return 'afternoon_half';
+  if (TWO_HOUR_LEAVE_CODES.has(code) || name.includes('2시간')) return 'two_hour';
+  return '';
+}
+
+function hasLeaveType(leaves: any[], type: string) {
+  return leaves.some((leave) => leaveType(leave) === type);
+}
+
+function twoHourWindow(leave: any) {
+  const code = String(leave?.leave_code || '').trim();
+  const codeWindow = TWO_HOUR_WINDOWS[code];
+  if (codeWindow) return codeWindow;
+  const match = String(leave?.leave_name || '').match(/\[(\d{1,2})\s*[-~]\s*(\d{1,2})\]/);
+  return match ? [Number(match[1]) * 60, Number(match[2]) * 60] as [number, number] : null;
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? '').replace(/[&<>\"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -280,7 +309,22 @@ Deno.serve(async (request) => {
       const scheduleMinutes = schedule ? toMinutes(schedule.schedule_time) : 540;
       const firstMinutes = toMinutes(first);
       const lastMinutes = toMinutes(last);
-      const lateLimit = hasLeaveCode(employeeLeaves, ['16', '61']) ? 14 * 60 : scheduleMinutes;
+      const hasMorningHalf = hasLeaveType(employeeLeaves, 'morning_half');
+      const hasAfternoonHalf = hasLeaveType(employeeLeaves, 'afternoon_half');
+      const twoHourWindows = employeeLeaves.filter((leave) => leaveType(leave) === 'two_hour').map(twoHourWindow).filter(Boolean) as [number, number][];
+      const morningTwoHourEnd = twoHourWindows
+        .filter(([start, end]) => start <= scheduleMinutes && end > scheduleMinutes)
+        .reduce((max, [, end]) => Math.max(max, end), 0);
+      const afternoonTwoHourEnd = twoHourWindows
+        .filter(([start]) => start >= 14 * 60)
+        .reduce((max, [, end]) => Math.max(max, end), 0);
+      // 휴가를 사용한 시간만큼 출근/퇴근 기준을 완화한다.
+      // 오전반차는 14:00까지 출근, 2시간 휴가는 기본 09:00 기준 11:00까지 출근을 정상으로 본다.
+      const lateLimit = hasMorningHalf
+        ? Math.max(scheduleMinutes, 14 * 60)
+        : morningTwoHourEnd
+          ? morningTwoHourEnd
+          : scheduleMinutes;
       const scheduleReason = String(schedule?.schedule_reason || '').trim();
       if (scheduleMinutes > 9 * 60 && firstMinutes > 9 * 60 && firstMinutes <= scheduleMinutes && scheduleReason && !fullDayLeave) {
         scheduleExceptions.push({ name: employee.name, checkIn: first, reason: scheduleReason });
@@ -288,7 +332,12 @@ Deno.serve(async (request) => {
       if (firstMinutes > lateLimit && !fullDayLeave) {
         late.push({ empNo: employee.emp_no, name: employee.name, checkIn: first, schedule: formatMinutes(scheduleMinutes) });
       }
-      const earlyLimit = hasLeaveCode(employeeLeaves, ['17', '62']) ? 14 * 60 : 18 * 60;
+      // 오후반차는 14:00 이후 퇴근, 2시간 휴가는 14:00 이후 퇴근을 정상으로 본다.
+      const earlyLimit = hasAfternoonHalf
+        ? 14 * 60
+        : afternoonTwoHourEnd
+          ? afternoonTwoHourEnd
+          : 18 * 60;
       if (lastMinutes < earlyLimit && employeeLogs.length > 1 && !['김민주', '김민주A'].includes(String(employee.name || '').trim())) {
         early.push({ name: employee.name, checkOut: last });
       }

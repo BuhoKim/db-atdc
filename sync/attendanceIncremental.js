@@ -22,6 +22,10 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
 }
 
+function formatAttendanceMetrics({ source, rowCount, queryBytes, queryMs, upsertBytes, checkpointAt, origin }) {
+  return `${source} | 증분 조회 건수: ${rowCount}건 | 조회 응답량: ${formatBytes(queryBytes)} | 조회 시간: ${queryMs}ms | Supabase 전송량: ${formatBytes(upsertBytes)} | 체크포인트 기준 시각: ${checkpointAt} | 기준: ${origin}`;
+}
+
 async function getAttendanceWindow({ supabase, companyCode, source, now = new Date(), overlapMinutes = DEFAULT_OVERLAP_MINUTES, initialLookbackMinutes = DEFAULT_INITIAL_LOOKBACK_MINUTES }) {
   const { data: checkpoints, error: checkpointError } = await supabase
     .from('db_sync_checkpoints')
@@ -90,6 +94,7 @@ module.exports = {
   DEFAULT_INITIAL_LOOKBACK_MINUTES,
   formatMySqlBoundary,
   formatBytes,
+  formatAttendanceMetrics,
   getAttendanceWindow,
   saveAttendanceCheckpoint,
 };

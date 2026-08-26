@@ -11,7 +11,7 @@ const { createClient } = require('@supabase/supabase-js');
 const {
   getAttendanceWindow,
   saveAttendanceCheckpoint,
-  formatBytes,
+  formatAttendanceMetrics,
 } = require('./attendanceIncremental');
 
 loadSyncEnv();
@@ -113,10 +113,10 @@ async function syncAttendance(conn) {
   `, [MY_COMPANY_CODE, MY_COMPANY_CODE, E_GROUP_FILTER, window.fromDateStr, window.toDateStr, window.fromDateStr, window.fromTimeStr, window.toDateStr, window.toTimeStr]);
 
   const queryBytes = Buffer.byteLength(JSON.stringify(rows || []), 'utf8');
-  log('INFO', `CAPS 증분 조회 ${window.from.toISOString()} ~ ${window.to.toISOString()}`, `${rows?.length || 0}건 | 약 ${formatBytes(queryBytes)} | ${Date.now() - queryStartedAt}ms | 기준 ${window.cursorOrigin} / 겹침 ${window.overlapMinutes}분`);
+  const queryMs = Date.now() - queryStartedAt;
   if (!rows || rows.length === 0) {
     await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: 0, queryBytes });
-    log('INFO', '동기화 대상 CAPS 기록 없음');
+    log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: 0, queryBytes, queryMs, upsertBytes: 0, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
     return 0;
   }
 
@@ -158,7 +158,7 @@ async function syncAttendance(conn) {
   }
 
   await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: rows.length, queryBytes, upsertBytes });
-  log('INFO', `CAPS 저장 완료 ${total}건`, `예상 Supabase 전송량 약 ${formatBytes(upsertBytes)}`);
+  log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: rows.length, queryBytes, queryMs, upsertBytes, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
 
   return total;
 }

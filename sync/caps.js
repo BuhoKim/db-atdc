@@ -107,8 +107,8 @@ async function syncAttendance(conn) {
       AND t.E_GROUP = ?
       AND t.E_DATE >= ?
       AND t.E_DATE <= ?
-      AND (t.E_DATE > ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') >= ?)
-      AND (t.E_DATE < ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') <= ?)
+      AND (t.E_DATE > ? OR LPAD(REPLACE(CAST(t.E_TIME AS CHAR), ':', ''), 6, '0') >= ?)
+      AND (t.E_DATE < ? OR LPAD(REPLACE(CAST(t.E_TIME AS CHAR), ':', ''), 6, '0') <= ?)
     ORDER BY t.E_DATE DESC, t.E_TIME DESC
   `, [MY_COMPANY_CODE, MY_COMPANY_CODE, E_GROUP_FILTER, window.fromDateStr, window.toDateStr, window.fromDateStr, window.fromTimeStr, window.toDateStr, window.toTimeStr]);
 

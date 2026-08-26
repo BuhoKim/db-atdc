@@ -1,4 +1,4 @@
-const DEFAULT_OVERLAP_MINUTES = 10;
+const DEFAULT_OVERLAP_MINUTES = 5;
 const DEFAULT_INITIAL_LOOKBACK_MINUTES = 60;
 
 function asValidDate(value) {

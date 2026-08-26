@@ -14,7 +14,7 @@
  * 
  * [실행 방법]
  *   1회 즉시 실행:  node sync_server.js --once
- *   데몬 주기 실행: node sync_server.js (기본 30분 주기)
+ *   데몬 주기 실행: node sync_server.js (기본 10분 주기)
  *   PM2 백그라운드: pm2 start sync_server.js --name db-atdc-sync
  * ==============================================================================
  */
@@ -26,10 +26,10 @@ const { createClient } = require('@supabase/supabase-js');
 const {
   getAttendanceWindow,
   saveAttendanceCheckpoint,
-  formatBytes,
+  formatAttendanceMetrics,
 } = require('./sync/attendanceIncremental');
 
-const SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 // ------------------------------------------------------------------------------
 // 1. 환경변수 및 기본 설정 (.env 자동 탐색 + Fallback 기본값)
@@ -88,9 +88,9 @@ const CONFIG = {
   // 드림베이 전용: 환경변수 오염으로 1600 자료가 섞이지 않도록 고정한다.
   companyCode: '1700',
   capsGroup: '09',
-  // 운영 동기화 주기는 항상 30분이다. 이전 PM2 환경값(600000)이 남아 있어도 사용하지 않는다.
+  // 운영 동기화 주기는 항상 10분이다. 이전 PM2 환경값은 사용하지 않는다.
   syncIntervalMs: SYNC_INTERVAL_MS,
-  attendanceOverlapMinutes: parseInt(process.env.ATTENDANCE_OVERLAP_MINUTES, 10) || 10,
+  attendanceOverlapMinutes: parseInt(process.env.ATTENDANCE_OVERLAP_MINUTES, 10) || 5,
   attendanceInitialLookbackMinutes: parseInt(process.env.ATTENDANCE_INITIAL_LOOKBACK_MINUTES, 10) || 60,
 };
 
@@ -356,10 +356,10 @@ async function syncCapsAttendance(conn) {
 
   const queryBytes = Buffer.byteLength(JSON.stringify(rows || []), 'utf8');
   const queryElapsed = Date.now() - queryStartedAt;
-  log('INFO', `캡스 증분 조회 ${window.from.toISOString()} ~ ${window.to.toISOString()} | ${rows?.length || 0}건 | 약 ${formatBytes(queryBytes)} | ${queryElapsed}ms | 기준 ${window.cursorOrigin} / 겹침 ${window.overlapMinutes}분`);
 
   if (!rows || rows.length === 0) {
-    await saveAttendanceCheckpoint({ supabase, companyCode: CONFIG.companyCode, source: 'caps', window, rowCount: 0, queryBytes });
+    await saveAttendanceCheckpoint({ supabase, companyCode: CONFIG.companyCode, source: 'caps', window, rowCount: 0, queryBytes, upsertBytes: 0 });
+    log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: 0, queryBytes, queryMs: queryElapsed, upsertBytes: 0, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
     return 0;
   }
 
@@ -401,7 +401,7 @@ async function syncCapsAttendance(conn) {
   }
 
   await saveAttendanceCheckpoint({ supabase, companyCode: CONFIG.companyCode, source: 'caps', window, rowCount: rows.length, queryBytes, upsertBytes });
-  log('INFO', `캡스 저장 완료 ${total}건 | 예상 Supabase 전송량 약 ${formatBytes(upsertBytes)}`);
+  log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: rows.length, queryBytes, queryMs: queryElapsed, upsertBytes, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
 
   return total;
 }

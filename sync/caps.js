@@ -8,11 +8,18 @@
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
 const { createClient } = require('@supabase/supabase-js');
+const {
+  getAttendanceWindow,
+  saveAttendanceCheckpoint,
+  formatBytes,
+} = require('./attendanceIncremental');
 
 loadSyncEnv();
 
 const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
 const E_GROUP_FILTER = process.env.CAPS_E_GROUP || '09';
+const ATTENDANCE_OVERLAP_MINUTES = parseInt(process.env.ATTENDANCE_OVERLAP_MINUTES, 10) || 10;
+const ATTENDANCE_INITIAL_LOOKBACK_MINUTES = parseInt(process.env.ATTENDANCE_INITIAL_LOOKBACK_MINUTES, 10) || 60;
 
 const MYSQL_CONFIG = {
   host: process.env.MYSQL_HOST,
@@ -64,9 +71,15 @@ function buildGateName(row) {
 
 async function syncAttendance(conn) {
   const now = new Date();
-  const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
-  const fromStr = `${fromDate.getFullYear()}${String(fromDate.getMonth() + 1).padStart(2, '0')}${String(fromDate.getDate()).padStart(2, '0')}`;
-  const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const window = await getAttendanceWindow({
+    supabase,
+    companyCode: MY_COMPANY_CODE,
+    source: 'caps',
+    now,
+    overlapMinutes: ATTENDANCE_OVERLAP_MINUTES,
+    initialLookbackMinutes: ATTENDANCE_INITIAL_LOOKBACK_MINUTES,
+  });
+  const queryStartedAt = Date.now();
 
   const [rows] = await conn.execute(`
     SELECT
@@ -94,16 +107,22 @@ async function syncAttendance(conn) {
       AND t.E_GROUP = ?
       AND t.E_DATE >= ?
       AND t.E_DATE <= ?
+      AND (t.E_DATE > ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') >= ?)
+      AND (t.E_DATE < ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') <= ?)
     ORDER BY t.E_DATE DESC, t.E_TIME DESC
-  `, [MY_COMPANY_CODE, MY_COMPANY_CODE, E_GROUP_FILTER, fromStr, todayStr]);
+  `, [MY_COMPANY_CODE, MY_COMPANY_CODE, E_GROUP_FILTER, window.fromDateStr, window.toDateStr, window.fromDateStr, window.fromTimeStr, window.toDateStr, window.toTimeStr]);
 
+  const queryBytes = Buffer.byteLength(JSON.stringify(rows || []), 'utf8');
+  log('INFO', `CAPS 증분 조회 ${window.from.toISOString()} ~ ${window.to.toISOString()}`, `${rows?.length || 0}건 | 약 ${formatBytes(queryBytes)} | ${Date.now() - queryStartedAt}ms | 기준 ${window.cursorOrigin} / 겹침 ${window.overlapMinutes}분`);
   if (!rows || rows.length === 0) {
+    await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: 0, queryBytes });
     log('INFO', '동기화 대상 CAPS 기록 없음');
     return 0;
   }
 
   const batchSize = 500;
   let total = 0;
+  let upsertBytes = 0;
 
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize).map((row) => {
@@ -135,7 +154,11 @@ async function syncAttendance(conn) {
     }
 
     total += batch.length;
+    upsertBytes += Buffer.byteLength(JSON.stringify(batch), 'utf8');
   }
+
+  await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: rows.length, queryBytes, upsertBytes });
+  log('INFO', `CAPS 저장 완료 ${total}건`, `예상 Supabase 전송량 약 ${formatBytes(upsertBytes)}`);
 
   return total;
 }

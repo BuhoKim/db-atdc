@@ -23,6 +23,11 @@ const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const { createClient } = require('@supabase/supabase-js');
+const {
+  getAttendanceWindow,
+  saveAttendanceCheckpoint,
+  formatBytes,
+} = require('./sync/attendanceIncremental');
 
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -85,7 +90,8 @@ const CONFIG = {
   capsGroup: '09',
   // 운영 동기화 주기는 항상 30분이다. 이전 PM2 환경값(600000)이 남아 있어도 사용하지 않는다.
   syncIntervalMs: SYNC_INTERVAL_MS,
-  attendanceLookbackMinutes: parseInt(process.env.ATTENDANCE_LOOKBACK_MINUTES, 10) || 60, // 기본 최근 1시간 출입로그 동기화
+  attendanceOverlapMinutes: parseInt(process.env.ATTENDANCE_OVERLAP_MINUTES, 10) || 10,
+  attendanceInitialLookbackMinutes: parseInt(process.env.ATTENDANCE_INITIAL_LOOKBACK_MINUTES, 10) || 60,
 };
 
 // Supabase 키 유효성 검사 및 안내
@@ -307,8 +313,15 @@ async function syncLeaves(conn) {
 // ------------------------------------------------------------------------------
 async function syncCapsAttendance(conn) {
   const now = new Date();
-  const cutoff = new Date(now.getTime() - CONFIG.attendanceLookbackMinutes * 60 * 1000);
-  const cutoffStr = `${cutoff.getFullYear()}${String(cutoff.getMonth() + 1).padStart(2, '0')}${String(cutoff.getDate()).padStart(2, '0')}${String(cutoff.getHours()).padStart(2, '0')}${String(cutoff.getMinutes()).padStart(2, '0')}${String(cutoff.getSeconds()).padStart(2, '0')}`;
+  const window = await getAttendanceWindow({
+    supabase,
+    companyCode: CONFIG.companyCode,
+    source: 'caps',
+    now,
+    overlapMinutes: CONFIG.attendanceOverlapMinutes,
+    initialLookbackMinutes: CONFIG.attendanceInitialLookbackMinutes,
+  });
+  const queryStartedAt = Date.now();
 
   const [rows] = await conn.execute(`
     SELECT
@@ -334,14 +347,25 @@ async function syncCapsAttendance(conn) {
       AND d.I_DEPT = e.I_DEPT
     WHERE COALESCE(e.I_RETIRE_YN, '0') <> '1'
       AND t.E_GROUP = ?
-      AND CONCAT(REPLACE(CAST(t.E_DATE AS CHAR), '-', ''), LPAD(REPLACE(CAST(t.E_TIME AS CHAR), ':', ''), 6, '0')) >= ?
+      AND t.E_DATE >= ?
+      AND t.E_DATE <= ?
+      AND (t.E_DATE > ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') >= ?)
+      AND (t.E_DATE < ? OR REPLACE(CAST(t.E_TIME AS CHAR), ':', '') <= ?)
     ORDER BY t.E_DATE DESC, t.E_TIME DESC
-  `, [CONFIG.companyCode, CONFIG.companyCode, CONFIG.capsGroup, cutoffStr]);
+  `, [CONFIG.companyCode, CONFIG.companyCode, CONFIG.capsGroup, window.fromDateStr, window.toDateStr, window.fromDateStr, window.fromTimeStr, window.toDateStr, window.toTimeStr]);
 
-  if (!rows || rows.length === 0) return 0;
+  const queryBytes = Buffer.byteLength(JSON.stringify(rows || []), 'utf8');
+  const queryElapsed = Date.now() - queryStartedAt;
+  log('INFO', `캡스 증분 조회 ${window.from.toISOString()} ~ ${window.to.toISOString()} | ${rows?.length || 0}건 | 약 ${formatBytes(queryBytes)} | ${queryElapsed}ms | 기준 ${window.cursorOrigin} / 겹침 ${window.overlapMinutes}분`);
+
+  if (!rows || rows.length === 0) {
+    await saveAttendanceCheckpoint({ supabase, companyCode: CONFIG.companyCode, source: 'caps', window, rowCount: 0, queryBytes });
+    return 0;
+  }
 
   const batchSize = 500;
   let total = 0;
+  let upsertBytes = 0;
 
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize).map((row) => {
@@ -373,7 +397,11 @@ async function syncCapsAttendance(conn) {
     }
 
     total += batch.length;
+    upsertBytes += Buffer.byteLength(JSON.stringify(batch), 'utf8');
   }
+
+  await saveAttendanceCheckpoint({ supabase, companyCode: CONFIG.companyCode, source: 'caps', window, rowCount: rows.length, queryBytes, upsertBytes });
+  log('INFO', `캡스 저장 완료 ${total}건 | 예상 Supabase 전송량 약 ${formatBytes(upsertBytes)}`);
 
   return total;
 }

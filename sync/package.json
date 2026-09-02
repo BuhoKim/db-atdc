@@ -7,7 +7,8 @@
     "start": "node index.js",
     "sync:caps": "node caps.js",
     "sync:emp": "node employees.js",
-    "sync:leaves": "node leaves.js"
+    "sync:leaves": "node leaves.js",
+    "backfill_attendance_7days": "node backfill_attendance_7days.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

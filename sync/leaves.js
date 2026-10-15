@@ -11,6 +11,7 @@ const { createClient } = require('@supabase/supabase-js');
 loadSyncEnv();
 
 const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
+const APPROVED_STATUS = '40';
 
 const MYSQL_CONFIG = {
   host: process.env.MYSQL_HOST,
@@ -55,13 +56,12 @@ async function syncLeaves(conn) {
     INNER JOIN hr_employee e ON e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
     INNER JOIN hr_department d ON d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
     WHERE y.I_COMPANY = ?
-      AND y.I_STATUS = '40'
       AND y.D_END_DATE >= ?
   `, [MY_COMPANY_CODE, fromStr]);
 
-  if (!rows || rows.length === 0) return 0;
+  const approvedRows = (rows || []).filter((row) => String(row.status || '').trim() === APPROVED_STATUS);
 
-  const records = rows.map((r) => ({
+  const records = approvedRows.map((r) => ({
     emp_no: normalizeEmpNo(r.emp_no),
     emp_name: String(r.emp_name || '').trim(),
     start_date: String(r.start_date || '').replace(/\D/g, '').slice(0, 8),
@@ -83,14 +83,52 @@ async function syncLeaves(conn) {
     }
   }
 
-  const { error } = await supabase
-    .from('db_leaves')
-    .upsert(uniqueRecords, { onConflict: 'emp_no,start_date,leave_code' });
+  if (uniqueRecords.length > 0) {
+    const { error } = await supabase
+      .from('db_leaves')
+      .upsert(uniqueRecords, { onConflict: 'emp_no,start_date,leave_code' });
 
-  if (error) {
-    throw new Error(`db_leaves upsert 실패: ${error.message}`);
+    if (error) {
+      throw new Error(`db_leaves upsert 실패: ${error.message}`);
+    }
   }
 
+  // 기존 db_leaves에는 승인 후 취소된 휴가가 남을 수 있다.
+  // 원본 조회가 성공한 뒤, 같은 동기화 범위에서 승인 목록에 없는 기록을 제거한다.
+  const { data: existingRows, error: existingError } = await supabase
+    .from('db_leaves')
+    .select('emp_no,start_date,end_date,leave_code')
+    .or(`start_date.gte.${fromStr},end_date.gte.${fromStr}`);
+
+  if (existingError) {
+    throw new Error(`기존 db_leaves 조회 실패: ${existingError.message}`);
+  }
+
+  const approvedKeys = new Set(uniqueRecords.map((r) => `${r.emp_no}|${r.start_date}|${r.leave_code}`));
+  const staleKeys = (existingRows || [])
+    .map((row) => ({
+      emp_no: String(row.emp_no || '').trim(),
+      start_date: String(row.start_date || '').replace(/\D/g, '').slice(0, 8),
+      leave_code: String(row.leave_code || '').trim(),
+    }))
+    .filter((row) => row.emp_no && row.start_date && row.leave_code)
+    .filter((row) => !approvedKeys.has(`${row.emp_no}|${row.start_date}|${row.leave_code}`));
+
+  let deletedCount = 0;
+  for (let index = 0; index < staleKeys.length; index += 50) {
+    const batch = staleKeys.slice(index, index + 50);
+    const filters = batch.map((row) => `and(emp_no.eq.${row.emp_no},start_date.eq.${row.start_date},leave_code.eq.${row.leave_code})`);
+    const { error: deleteError } = await supabase
+      .from('db_leaves')
+      .delete()
+      .or(filters.join(','));
+    if (deleteError) {
+      throw new Error(`취소 휴가 삭제 실패: ${deleteError.message}`);
+    }
+    deletedCount += batch.length;
+  }
+
+  console.log(`[db-atdc] 연차 원본 ${rows?.length || 0}건 | 승인 ${uniqueRecords.length}건 | 취소/삭제 정리 ${deletedCount}건`);
   return uniqueRecords.length;
 }
 

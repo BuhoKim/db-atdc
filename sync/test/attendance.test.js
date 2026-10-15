@@ -84,11 +84,11 @@ test('employee sync runs after 08:00 KST only if not already synced today', asyn
   assert.equal(millisecondsUntilNextEightKst(new Date('2026-10-15T22:59:00Z')), 60000);
 });
 
-test('legacy entry points resolve to the same 30-minute worker without starting it', () => {
+test('legacy entry points resolve to the same 10-minute worker without starting it', () => {
   const worker = require('../index');
   assert.equal(require('../../sync_server').main, worker.main);
   assert.equal(require('../sync_server').main, worker.main);
-  assert.equal(worker.SYNC_INTERVAL_MS, 1800000);
+  assert.equal(worker.SYNC_INTERVAL_MS, 600000);
 });
 
 test('duplicate worker lock is rejected and releases cleanly', () => {

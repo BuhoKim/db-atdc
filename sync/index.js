@@ -4,7 +4,7 @@ const { createSyncSupabaseClient, COMPANY_CODE } = require('./supabaseClient');
 const { acquireWorkerLock } = require('./workerLock');
 const mysql = require('mysql2/promise');
 
-const SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 function log(message) {
   console.log(`[${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}] ${message}`);

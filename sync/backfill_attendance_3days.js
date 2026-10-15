@@ -8,13 +8,11 @@
  */
 
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient, COMPANY_CODE, CAPS_GROUP } = require('./supabaseClient');
 const { loadSyncEnv } = require('./loadEnv');
 
 loadSyncEnv();
 
-const COMPANY_CODE = '1700';
-const CAPS_GROUP = '09';
 const DAYS = 3;
 
 const mysqlConfig = {
@@ -26,11 +24,7 @@ const mysqlConfig = {
   connectTimeout: 15000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+const supabase = createSyncSupabaseClient();
 
 function dateKey(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

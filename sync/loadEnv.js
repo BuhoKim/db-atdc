@@ -33,6 +33,8 @@ function loadSyncEnv() {
   const candidates = [
     path.join(__dirname, '.env'),
     path.join(__dirname, '.env.local'),
+    path.join(__dirname, '..', '.env'),
+    path.join(__dirname, '..', '.env.local'),
     path.join(cwd, '.env'),
     path.join(cwd, '.env.local'),
     path.join(cwd, '..', '.env'),

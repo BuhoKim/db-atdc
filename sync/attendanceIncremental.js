@@ -26,7 +26,11 @@ function formatAttendanceMetrics({ source, rowCount, queryBytes, queryMs, upsert
   return `${source} | 증분 조회 건수: ${rowCount}건 | 조회 응답량: ${formatBytes(queryBytes)} | 조회 시간: ${queryMs}ms | Supabase 전송량: ${formatBytes(upsertBytes)} | 체크포인트 기준 시각: ${checkpointAt} | 기준: ${origin}`;
 }
 
-async function getAttendanceWindow({ supabase, companyCode, source, now = new Date(), overlapMinutes = DEFAULT_OVERLAP_MINUTES, initialLookbackMinutes = DEFAULT_INITIAL_LOOKBACK_MINUTES }) {
+async function getAttendanceWindow({ supabase, companyCode, source, now = new Date(), overlapMinutes = DEFAULT_OVERLAP_MINUTES, initialLookbackMinutes = DEFAULT_INITIAL_LOOKBACK_MINUTES, recoveryFrom }) {
+  if (!asValidDate(now) || !Number.isFinite(overlapMinutes) || overlapMinutes < 0
+    || !Number.isFinite(initialLookbackMinutes) || initialLookbackMinutes <= 0) {
+    throw new Error('출입기록 조회 시각/겹침 설정이 올바르지 않습니다.');
+  }
   const { data: checkpoints, error: checkpointError } = await supabase
     .from('db_sync_checkpoints')
     .select('last_success_at')
@@ -54,7 +58,16 @@ async function getAttendanceWindow({ supabase, companyCode, source, now = new Da
   }
 
   const fallback = new Date(now.getTime() - initialLookbackMinutes * 60 * 1000);
-  const base = cursor || fallback;
+  let base = cursor || fallback;
+  if (recoveryFrom !== undefined) {
+    const recoveryStart = asValidDate(recoveryFrom);
+    if (!recoveryStart || recoveryStart > now) throw new Error('복구 시작 시각이 올바르지 않습니다.');
+    if (recoveryStart < base) {
+      base = recoveryStart;
+      cursorOrigin += '+recovery';
+    }
+  }
+  if (base > now) throw new Error('체크포인트가 현재보다 미래입니다. 서버 시계를 확인하세요.');
   const from = new Date(base.getTime() - overlapMinutes * 60 * 1000);
   const fromParts = boundaryParts(from);
   const toParts = boundaryParts(now);

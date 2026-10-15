@@ -6,11 +6,11 @@
 
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient, COMPANY_CODE } = require('./supabaseClient');
 
 loadSyncEnv();
 
-const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
+const MY_COMPANY_CODE = COMPANY_CODE;
 const APPROVED_STATUS = '40';
 
 const MYSQL_CONFIG = {
@@ -22,11 +22,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 15000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 function normalizeEmpNo(value) {
   const digits = String(value ?? '').replace(/\D/g, '');

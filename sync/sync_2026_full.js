@@ -14,7 +14,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient, COMPANY_CODE } = require('./supabaseClient');
+const { loadSyncEnv } = require('./loadEnv');
 
 // 1. 환경 변수 로드
 function loadEnv() {
@@ -46,9 +47,9 @@ function loadEnv() {
   });
 }
 
-loadEnv();
+loadSyncEnv();
 
-const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
+const MY_COMPANY_CODE = COMPANY_CODE;
 
 const MYSQL_CONFIG = {
   host: process.env.MYSQL_HOST || 'Prd-Hecto-WHR-Ext-NLB-8e82b66ed560637d.elb.ap-northeast-2.amazonaws.com',
@@ -59,17 +60,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 20000,
 };
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://gbfoempwoeurhhlxqxgy.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseKey) {
-  console.error('❌ SUPABASE_SERVICE_ROLE_KEY 가 설정되어 있지 않습니다.');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+const supabase = createSyncSupabaseClient();
 
 function normalizeEmpNo(value) {
   const digits = String(value ?? '').replace(/\D/g, '');

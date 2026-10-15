@@ -6,13 +6,12 @@
  */
 
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient, COMPANY_CODE, CAPS_GROUP } = require('./supabaseClient');
 const { loadSyncEnv } = require('./loadEnv');
 
 loadSyncEnv();
 
-const COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
-const GROUP_CODE = process.env.CAPS_E_GROUP || '09';
+const GROUP_CODE = CAPS_GROUP;
 const DAYS = Number(process.env.BACKFILL_DAYS || 7);
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -25,11 +24,7 @@ const mysqlConfig = {
   connectTimeout: 20000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+const supabase = createSyncSupabaseClient();
 
 function kstParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {

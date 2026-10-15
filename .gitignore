@@ -28,6 +28,7 @@ yarn-error.log*
 .env*.local
 .env
 sync/.env
+sync/.sync-worker.lock
 
 # vercel
 .vercel

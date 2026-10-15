@@ -7,7 +7,7 @@
 
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient, COMPANY_CODE, CAPS_GROUP } = require('./supabaseClient');
 const {
   getAttendanceWindow,
   saveAttendanceCheckpoint,
@@ -16,8 +16,8 @@ const {
 
 loadSyncEnv();
 
-const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1700';
-const E_GROUP_FILTER = process.env.CAPS_E_GROUP || '09';
+const MY_COMPANY_CODE = COMPANY_CODE;
+const E_GROUP_FILTER = CAPS_GROUP;
 const ATTENDANCE_OVERLAP_MINUTES = parseInt(process.env.ATTENDANCE_OVERLAP_MINUTES, 10) || 10;
 const ATTENDANCE_INITIAL_LOOKBACK_MINUTES = parseInt(process.env.ATTENDANCE_INITIAL_LOOKBACK_MINUTES, 10) || 60;
 
@@ -30,11 +30,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 15000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 const GATE_MAPPING = {
   '4000': 'CAPS',
@@ -69,8 +65,7 @@ function buildGateName(row) {
   return parts.length > 0 ? parts.join(' / ') : '출입';
 }
 
-async function syncAttendance(conn) {
-  const now = new Date();
+async function syncAttendance(conn, { now = new Date(), recoveryFrom, dryRun = false, verify = false } = {}) {
   const window = await getAttendanceWindow({
     supabase,
     companyCode: MY_COMPANY_CODE,
@@ -78,7 +73,9 @@ async function syncAttendance(conn) {
     now,
     overlapMinutes: ATTENDANCE_OVERLAP_MINUTES,
     initialLookbackMinutes: ATTENDANCE_INITIAL_LOOKBACK_MINUTES,
+    recoveryFrom,
   });
+  log('INFO', `출입기록 조회 구간 (한국시간): ${window.fromStr} ~ ${window.toStr}`, `기준: ${window.cursorOrigin}`);
   const queryStartedAt = Date.now();
 
   const [rows] = await conn.execute(`
@@ -114,21 +111,36 @@ async function syncAttendance(conn) {
 
   const queryBytes = Buffer.byteLength(JSON.stringify(rows || []), 'utf8');
   const queryMs = Date.now() - queryStartedAt;
+  if (dryRun) {
+    log('INFO', `복구 사전조회: 원본 ${rows?.length || 0}건 / ${queryBytes}B (DB 저장·체크포인트 갱신 안 함)`);
+    return rows?.length || 0;
+  }
   if (!rows || rows.length === 0) {
     await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: 0, queryBytes });
     log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: 0, queryBytes, queryMs, upsertBytes: 0, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
     return 0;
   }
 
+  // One employee can authenticate at several gates in the same second.
+  // Keep the existing (sabun,a_time) conflict key and send each key only once.
+  const uniqueRows = [...new Map(rows.map(row => [
+    `${String(row.idno || '').trim()}|${String(row.e_date || '').replace(/\D/g, '').slice(0, 8)}|${String(row.e_time || '').replace(/\D/g, '').slice(0, 6).padStart(6, '0')}`, row,
+  ])).values()];
+  const expectedKeys = new Set();
   const batchSize = 500;
   let total = 0;
   let upsertBytes = 0;
 
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const batch = rows.slice(i, i + batchSize).map((row) => {
+  for (let i = 0; i < uniqueRows.length; i += batchSize) {
+    const batch = uniqueRows.slice(i, i + batchSize).map((row) => {
       const empNo = normalizeEmpNo(row.emp_no || row.idno);
       const sabun = String(row.idno || '').trim() || `${MY_COMPANY_CODE}${String(empNo).padStart(8, '0')}`;
       const aTime = `${String(row.e_date || '').replace(/\D/g, '').slice(0, 8)}${String(row.e_time || '').replace(/\D/g, '').slice(0, 6).padStart(6, '0')}`;
+      if (!empNo || !/^1700\d{8}$/.test(sabun) || !/^\d{14}$/.test(aTime)
+        || !Number.isFinite(Date.parse(parseATime(aTime)))) {
+        throw new Error('원본 사번/출입시각 형식 오류. 체크포인트를 갱신하지 않습니다.');
+      }
+      expectedKeys.add(`${sabun}|${aTime}`);
 
       return {
         sabun,
@@ -157,6 +169,20 @@ async function syncAttendance(conn) {
     upsertBytes += Buffer.byteLength(JSON.stringify(batch), 'utf8');
   }
 
+  if (verify) {
+    const foundKeys = new Set();
+    for (let offset = 0; ; offset += 500) {
+      const result = await supabase.from('db_attendance').select('sabun,a_time').eq('source', 'caps')
+        .like('sabun', `${MY_COMPANY_CODE}%`).gte('a_time', window.fromStr).lte('a_time', window.toStr)
+        .order('sabun').order('a_time').range(offset, offset + 499);
+      if (result.error) throw new Error(`복구 결과 검증 실패: ${result.error.message}`);
+      for (const row of result.data || []) foundKeys.add(`${row.sabun}|${row.a_time}`);
+      if ((result.data || []).length < 500) break;
+    }
+    const missing = [...expectedKeys].filter(key => !foundKeys.has(key)).length;
+    if (missing) throw new Error(`원본 대조 누락 ${missing}건. 체크포인트를 갱신하지 않습니다.`);
+    log('INFO', `원본 사번·출입시각 대조 완료: ${expectedKeys.size}건 / 누락 0건`);
+  }
   await saveAttendanceCheckpoint({ supabase, companyCode: MY_COMPANY_CODE, source: 'caps', window, rowCount: rows.length, queryBytes, upsertBytes });
   log('INFO', formatAttendanceMetrics({ source: 'CAPS', rowCount: rows.length, queryBytes, queryMs, upsertBytes, checkpointAt: window.to.toISOString(), origin: window.cursorOrigin }));
 
@@ -175,6 +201,7 @@ async function runSync() {
     log('INFO', `동기화 완료 (${elapsed}s)`, `출입기록 ${count}건`);
   } catch (error) {
     log('ERROR', 'CAPS 동기화 실패', error.message);
+    process.exitCode = 1;
   } finally {
     if (conn) await conn.end();
   }

@@ -9,6 +9,7 @@
     "sync:emp": "node employees.js",
     "sync:leaves": "node leaves.js",
     "check:supabase": "node check-supabase.js",
+    "inspect:employee": "node inspect_hr_employee.js",
     "recover:attendance": "node recover_attendance.js",
     "test": "node --test test/*.test.js",
     "backfill_attendance_7days": "node backfill_attendance_7days.js"

@@ -30,6 +30,9 @@ yarn-error.log*
 sync/.env
 sync/.sync-worker.lock
 
+# Private employee exports (never commit personnel data)
+exports/
+
 # vercel
 .vercel
 

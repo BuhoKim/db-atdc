@@ -22,6 +22,9 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const HR_STATE_LABELS = { active: '재직', on_leave: '휴직', resigned: '퇴직' };
+function hrStateLabel(employee) { return HR_STATE_LABELS[employee.employment_status] || '-'; }
+
 function EmployeesPageContent() {
   const [theme, setTheme] = usePersistentTheme('light');
   const [employees, setEmployees] = useState([]);
@@ -278,7 +281,7 @@ function EmployeesPageContent() {
   // [엑셀 다운로드]
   const handleExportExcel = () => {
     try {
-      const headers = ['사번', '성명', '부서', '직급', '직책', '이메일', '로그인ID', '재직상태', '관리자권한', '등록일시'];
+      const headers = ['사번', '성명', '부서', '직급', '직책', '이메일', '로그인ID', '재직상태', '인사상태', '상태코드', '적용일자', '관리자권한', '등록일시'];
       const rows = filteredEmployees.map((e) => [
         e.raw_emp_no || e.emp_no,
         e.name,
@@ -288,6 +291,9 @@ function EmployeesPageContent() {
         e.email || '-',
         e.login_id || '-',
         e.is_active ? '재직' : '퇴사',
+        hrStateLabel(e),
+        e.state_code || '-',
+        e.state_date || '-',
         e.is_admin ? '관리자' : '일반',
         e.synced_at ? e.synced_at.slice(0, 10) : '-',
       ]);
@@ -514,6 +520,8 @@ function EmployeesPageContent() {
                   <th style={{ width: '110px' }}>로그인 ID</th>
                   <th style={{ width: '105px', textAlign: 'center' }}>출근 기준</th>
                   <th style={{ width: '80px', textAlign: 'center' }}>재직상태</th>
+                  <th style={{ width: '85px', textAlign: 'center' }} title="인사시스템 I_STATE_CODE">인사상태</th>
+                  <th style={{ width: '110px', textAlign: 'center' }} title="인사시스템 D_STATE_DATE">적용일자</th>
                   <th style={{ width: '80px', textAlign: 'center' }}>권한</th>
                   <th style={{ width: '130px', textAlign: 'center' }}>관리 액션</th>
                 </tr>
@@ -521,14 +529,14 @@ function EmployeesPageContent() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '60px 16px', color: 'var(--text-3)' }}>
+                    <td colSpan={13} style={{ textAlign: 'center', padding: '60px 16px', color: 'var(--text-3)' }}>
                       <RefreshCw size={24} className="spin" style={{ margin: '0 auto 10px', display: 'block', color: 'var(--blue)' }} />
                       직원 목록을 불러오는 중입니다...
                     </td>
                   </tr>
                 ) : filteredEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '60px 16px', color: 'var(--text-3)' }}>
+                    <td colSpan={13} style={{ textAlign: 'center', padding: '60px 16px', color: 'var(--text-3)' }}>
                       조건에 일치하는 직원이 없습니다.
                     </td>
                   </tr>
@@ -571,6 +579,13 @@ function EmployeesPageContent() {
                           <span className="badge-status badge-red">퇴사</span>
                         )}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge-status ${emp.employment_status === 'on_leave' ? 'badge-amber' : emp.employment_status === 'resigned' ? 'badge-red' : emp.employment_status === 'active' ? 'badge-checkin' : 'badge-gray'}`}
+                          title={emp.state_code ? `I_STATE_CODE: ${emp.state_code}` : '직원정보 동기화 후 표시됩니다'}>
+                          {hrStateLabel(emp)}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', fontSize: '12px', whiteSpace: 'nowrap' }}>{emp.state_date || '-'}</td>
                       <td style={{ textAlign: 'center' }}>
                         {emp.is_admin ? (
                           <span className="badge-status badge-purple" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>

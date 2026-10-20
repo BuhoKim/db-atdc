@@ -145,6 +145,9 @@ sequenceDiagram
 | `login_id` | `varchar(50)` | 로그인 아이디 (예: `mjkaha`) | Indexed |
 | `company_code` | `varchar(10)` | 법인 코드 (`1700`: 드림베이, `1000`: 헥토) | Indexed |
 | `is_active` | `boolean` | 재직 여부 (`true`: 재직, `false`: 퇴사) | Default `true` |
+| `state_code` | `varchar(3)` | **db_employees 전용**: `hr_employee.I_STATE_CODE` (`001` 재직, `002` 휴직, `999` 퇴직) | NULL 또는 확인된 코드 |
+| `employment_status` | `text` | **db_employees 전용**: `active`, `on_leave`, `resigned`. 원본 인사상태이며 수동 비활성화와 별도 | `state_code`와 일치 CHECK |
+| `state_date` | `date` | **db_employees 전용**: `hr_employee.D_STATE_DATE` 원본 인사상태 적용일자 | 날짜 미입력/유효하지 않으면 NULL |
 | `synced_at` | `timestamptz`| 최종 동기화 시각 | - |
 
 ### 5.2 출입 로그 테이블 (`db_attendance` / `sa_attendance`)

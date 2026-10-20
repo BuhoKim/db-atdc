@@ -58,7 +58,7 @@ export async function GET(request) {
     const sourceResults = await Promise.all(getReadableDataSources(includeAllCompanies).map(async (source) => {
       let query = supabaseAdmin
         .from(`${source.prefix}_employees`)
-        .select('emp_no,name,dept,email,login_id,company_code,is_active,synced_at')
+        .select('emp_no,name,dept,email,login_id,company_code,is_active,synced_at,state_code,employment_status,state_date')
         .order('is_active', { ascending: false })
         .order('dept', { ascending: true })
         .order('name', { ascending: true });

@@ -7,6 +7,7 @@
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient, COMPANY_CODE } = require('./supabaseClient');
+const { mapEmployeeState } = require('./employeeState');
 
 loadSyncEnv();
 
@@ -20,8 +21,6 @@ const MYSQL_CONFIG = {
   port: parseInt(process.env.MYSQL_PORT, 10) || 3306,
   connectTimeout: 15000,
 };
-
-const supabase = createSyncSupabaseClient();
 
 function normalizeEmpNo(value) {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -40,14 +39,17 @@ function pickFirst(row, keys = []) {
   return '';
 }
 
-async function syncEmployees(conn) {
+async function syncEmployees(conn, { supabaseClient } = {}) {
+  const supabase = supabaseClient || createSyncSupabaseClient();
   const [rows] = await conn.execute(`
     SELECT
       e.*,
       e.I_EMPLOY_NO   AS emp_no,
       e.N_EMPLOY_NAME AS name,
       d.N_DEPT        AS dept,
-      e.I_RETIRE_YN   AS retire_yn
+      e.I_RETIRE_YN   AS retire_yn,
+      e.I_STATE_CODE  AS state_code,
+      e.D_STATE_DATE  AS state_date
     FROM hr_employee e
     LEFT JOIN hr_department d ON
       d.I_COMPANY = e.I_COMPANY
@@ -61,7 +63,7 @@ async function syncEmployees(conn) {
   const empNos = rows.map((row) => normalizeEmpNo(row.emp_no)).filter(Boolean);
   const { data: existingRows, error: existingError } = await supabase
     .from('db_employees')
-    .select('emp_no,is_active')
+    .select('emp_no,is_active,state_code,employment_status,state_date')
     .in('emp_no', empNos);
   if (existingError) throw new Error(`기존 재직상태 조회 실패: ${existingError.message}`);
   const existingByEmpNo = new Map((existingRows || []).map((row) => [row.emp_no, row]));
@@ -71,7 +73,6 @@ async function syncEmployees(conn) {
     const email = pickFirst(row, ['email', 'EMAIL', 'I_EMAIL', 'N_EMAIL', 'EMAIL_ADDRESS']);
     const loginId = pickFirst(row, ['login_id', 'LOGIN_ID', 'user_id', 'USER_ID', 'userid']) || (email.includes('@') ? email.split('@')[0] : '');
 
-    const sourceRetired = String(row.retire_yn ?? '').trim() === '1';
     const existing = existingByEmpNo.get(empNo);
     const item = {
       emp_no: empNo,
@@ -80,7 +81,7 @@ async function syncEmployees(conn) {
       email: email && email.includes('@') ? email : null,
       login_id: loginId || null,
       company_code: MY_COMPANY_CODE,
-      is_active: sourceRetired ? false : (existing ? existing.is_active !== false : true),
+      ...mapEmployeeState(row, existing),
       synced_at: new Date().toISOString(),
     };
     return item;

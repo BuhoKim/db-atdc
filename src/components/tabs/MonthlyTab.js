@@ -4,6 +4,7 @@ import React, { memo, useEffect, useMemo, useRef, useState, useCallback } from '
 import { RefreshCw, Download } from 'lucide-react';
 import MonthSearchPicker from '../MonthSearchPicker';
 import AttendanceNoteModal from '../AttendanceNoteModal';
+import EmploymentLeaveBadge from '../EmploymentLeaveBadge';
 import { getHolidayName, getLeaveMeta } from '../../lib/leaveRules';
 import { clampToHalfHourSteps, formatHalfHourSteps, getMonthRangeList, normalizeDeptName, normalizeEmpNoKey, formatTimeString } from '../../lib/dashboardUtils';
 import { MONTHLY_DEFAULT_NOTE, buildScheduleOverrideMap, resolveSchedulePairForDate } from '../../lib/scheduleResolver';
@@ -223,7 +224,7 @@ function MonthlyTab({
                         }}
                       >
                         <div style={{ display: 'grid', justifyItems: 'center', gap: '2px', lineHeight: 1.15 }}>
-                          <span style={{ color: 'var(--text-1)', fontSize: 13.5, fontWeight: 700 }}>{emp.name}</span>
+                          <span style={{ color: 'var(--text-1)', fontSize: 13.5, fontWeight: 700 }}>{emp.name}<EmploymentLeaveBadge employee={emp} /></span>
                           <small style={{ color: 'var(--text-2)', fontWeight: 500, fontSize: 11.5 }}>({emp.dept})</small>
                         </div>
                       </td>

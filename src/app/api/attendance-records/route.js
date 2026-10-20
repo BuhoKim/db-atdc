@@ -9,6 +9,7 @@ import {
   fetchAttendanceNotes,
 } from '@/lib/supabaseDb';
 import { normalizeEmpNoKey } from '@/lib/dashboardUtils';
+import { employmentStateFields } from '@/lib/employmentState';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export async function GET(request) {
       const employeeQuery = () => {
         let query = supabaseAdmin
           .from(source.prefix + '_employees')
-          .select('emp_no,name,dept,company_code,is_active')
+          .select('emp_no,name,dept,company_code,is_active' + (source.prefix === 'db' ? ',employment_status,state_code,state_date' : ''))
           .eq('is_active', true)
           .order('dept', { ascending: true })
           .order('name', { ascending: true });
@@ -116,6 +117,7 @@ export async function GET(request) {
         empNo: scopedEmpNo,
         raw_emp_no: employee.raw_emp_no || parsedEmpNo.empNo || '',
         name: employee.name || '-',
+        ...employmentStateFields(employee),
         dept: employee.dept || '부서미지정',
         company_code: source.companyCode,
         data_source: source.prefix,

@@ -5,6 +5,7 @@ import AppSidebar from '@/components/AppSidebar';
 import { usePersistentTheme } from '@/lib/usePersistentTheme';
 import { useSearchParams } from 'next/navigation';
 import AttendanceNoteModal from '@/components/AttendanceNoteModal';
+import EmploymentLeaveBadge from '@/components/EmploymentLeaveBadge';
 import { getKstDateKey, shiftKstDateKey } from '@/lib/kstDate';
 import {
   Clock,
@@ -451,6 +452,7 @@ function AttendanceRecordsContent() {
                       <div>
                         <div style={{ fontSize: 13.5, fontWeight: 700, color: isSelected ? 'var(--blue)' : 'var(--text-1)' }}>
                           {emp.name}
+                          <EmploymentLeaveBadge employee={emp} />
                         </div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
                           {emp.dept} · {emp.raw_emp_no || emp.emp_no}
@@ -472,6 +474,7 @@ function AttendanceRecordsContent() {
                   {selectedEmployee
                     ? `${selectedEmployee.name} (${selectedEmployee.dept} · 사번 ${selectedEmployee.raw_emp_no || selectedEmployee.emp_no}) 출입 기록`
                     : `전체 직원 출입 기록 내역`}
+                  <EmploymentLeaveBadge employee={selectedEmployee} />
                 </h3>
                 <p className="card-subtitle">
                   조회 기간: {fromDate} ~ {toDate} · 총 {processedLogs.length}건
@@ -522,7 +525,7 @@ function AttendanceRecordsContent() {
                         {selectedEmpNo === 'ALL' && (
                           <>
                             <td>
-                              <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>{log.name}</span>
+                              <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>{log.name}<EmploymentLeaveBadge employee={log} /></span>
                               <span style={{ fontSize: 11.5, color: 'var(--text-3)', marginLeft: 4, fontFamily: 'var(--mono)' }}>
                                 ({log.raw_emp_no || log.empNo})
                               </span>

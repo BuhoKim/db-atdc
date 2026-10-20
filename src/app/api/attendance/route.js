@@ -5,6 +5,7 @@ import { fetchAttendanceLogs, fetchCalendarLeaves, fetchEmployeeSchedules, fetch
 import { getLeaveMeta } from '@/lib/leaveRules';
 import { getKstDateKey, shiftKstDateKey } from '@/lib/kstDate';
 import { normalizeEmpNoKey, formatTimeString } from '@/lib/dashboardUtils';
+import { employmentStateFields } from '@/lib/employmentState';
 import {
   toMinutes,
   normalizeTime,
@@ -80,7 +81,10 @@ export async function GET(request) {
       ].join('|');
       leaveMap.set(key, leave);
     });
-    const leaves = Array.from(leaveMap.values());
+    const employmentByEmpNo = new Map(employees.map(employee => [normalizeEmpNoKey(employee.emp_no), employee]));
+    const leaves = Array.from(leaveMap.values()).map(leave => ({ ...leave,
+      ...employmentStateFields(employmentByEmpNo.get(normalizeEmpNoKey(leave.empNo))),
+    }));
 
     const employeeScheduleMap = buildEmployeeScheduleMap(employeeSchedules);
     const overrideMap = buildScheduleOverrideMap(overrides);
@@ -211,6 +215,7 @@ export async function GET(request) {
         empNo: emp.emp_no,
         rawEmpNo: emp.raw_emp_no || emp.emp_no,
         name: emp.name,
+        ...employmentStateFields(emp),
         dept: emp.dept,
         companyCode: emp.company_code || '1700',
         dataSource: emp.data_source || 'db',
@@ -284,6 +289,7 @@ export async function GET(request) {
       empNo: e.emp_no,
       rawEmpNo: e.raw_emp_no || e.emp_no,
       name: e.name,
+      ...employmentStateFields(e),
       dept: e.dept,
       companyCode: e.company_code || '1700',
       dataSource: e.data_source || 'db',

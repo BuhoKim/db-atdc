@@ -21,6 +21,7 @@ import {
   Lock,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import EmploymentLeaveBadge from '@/components/EmploymentLeaveBadge';
 
 const HR_STATE_LABELS = { active: '재직', on_leave: '휴직', resigned: '퇴직' };
 function hrStateLabel(employee) { return HR_STATE_LABELS[employee.employment_status] || '-'; }
@@ -548,6 +549,7 @@ function EmployeesPageContent() {
                       </td>
                       <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-1)' }}>
                         {emp.name}
+                        <EmploymentLeaveBadge employee={emp} />
                       </td>
                       <td style={{ color: 'var(--text-1)', fontWeight: 500 }}>
                         {emp.dept || '-'}

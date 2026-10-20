@@ -97,7 +97,7 @@ async function fetchAttendanceSource(source, range, options) {
   const employeeQuery = () => {
     let query = supabaseAdmin
       .from(`${prefix}_employees`)
-      .select('emp_no,name,dept,email,login_id,company_code,is_active')
+      .select('emp_no,name,dept,email,login_id,company_code,is_active' + (prefix === 'db' ? ',employment_status,state_code,state_date' : ''))
       .eq('is_active', true)
       .order('dept', { ascending: true })
       .order('name', { ascending: true });

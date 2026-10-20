@@ -4,6 +4,7 @@ import React, { memo, useMemo, useState } from 'react';
 import { CircleUserRound, Moon, Search, Sun } from 'lucide-react';
 import DashboardCalendarWidget from '../DashboardCalendarWidget';
 import AttendanceNoteModal from '../AttendanceNoteModal';
+import EmploymentLeaveBadge from '../EmploymentLeaveBadge';
 import { getKstDateKey } from '../../lib/kstDate';
 import { getStatusBadgeMeta } from '../../lib/leaveRules';
 import { matchesDeptFilter, normalizeDeptName, formatTimeString } from '../../lib/dashboardUtils';
@@ -386,6 +387,7 @@ function DashboardTab({
                                   <div className="dashboard-emp-meta">
                                     <div className="dashboard-emp-name">
                                       {emp.name}
+                                      <EmploymentLeaveBadge employee={emp} />
                                     </div>
                                   </div>
                                 </div>

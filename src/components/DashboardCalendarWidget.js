@@ -8,6 +8,7 @@ import {
   getLeaveDisplayName,
 } from '../lib/leaveRules';
 import MonthSearchPicker from './MonthSearchPicker';
+import EmploymentLeaveBadge from './EmploymentLeaveBadge';
 import { getMonthRangeList } from '../lib/dashboardUtils';
 import useHolidayCalendar from '../lib/useHolidayCalendar';
 
@@ -143,6 +144,7 @@ export default function DashboardCalendarWidget({
                       className="calendar-detail__name-chip"
                     >
                       {getLeaveDisplayName(leave, employeeNameLookup)}
+                      <EmploymentLeaveBadge employee={leave} />
                     </span>
                   ))}
                 </div>
@@ -283,6 +285,7 @@ export default function DashboardCalendarWidget({
                         title={`${String(getLeaveDisplayName(leave, employeeNameLookup) || '')} · ${String(meta.label || '')}`}
                       >
                         {getLeaveDisplayName(leave, employeeNameLookup)}
+                        <EmploymentLeaveBadge employee={leave} />
                       </span>
                     );
                   })}

@@ -148,6 +148,11 @@ sequenceDiagram
 | `state_code` | `varchar(3)` | **db_employees 전용**: `hr_employee.I_STATE_CODE` (`001` 재직, `002` 휴직, `999` 퇴직) | NULL 또는 확인된 코드 |
 | `employment_status` | `text` | **db_employees 전용**: `active`, `on_leave`, `resigned`. 원본 인사상태이며 수동 비활성화와 별도 | `state_code`와 일치 CHECK |
 | `state_date` | `date` | **db_employees 전용**: `hr_employee.D_STATE_DATE` 원본 인사상태 적용일자 | 날짜 미입력/유효하지 않으면 NULL |
+
+`on_leave` 직원은 직원관리·대시보드·월간 근태·출입기록·달력에서 이름 옆에 `휴직`으로
+표시합니다. 일일 메일의 근무 기준일이 휴직 적용일 이상이면 미출근/출근 이상/퇴근 이상/
+휴가자 집계에서 제외합니다. 적용일 이전 기록은 유지하며, 적용일이 없으면 현재 휴직
+상태로 제외합니다. 이 표시는 이름 원본·출입기록·연차 원본·계정 권한을 변경하지 않습니다.
 | `synced_at` | `timestamptz`| 최종 동기화 시각 | - |
 
 ### 5.2 출입 로그 테이블 (`db_attendance` / `sa_attendance`)
